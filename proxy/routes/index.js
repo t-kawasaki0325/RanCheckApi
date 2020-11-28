@@ -1,9 +1,11 @@
 const express = require('express');
+const puppeteer = require('../modules/puppeteer');
 const router = express.Router();
 
-/* GET home page. */
-router.get('/', function (req, res, next) {
-  res.send('respond with a resource');
+router.post('/', async (req, res) => {
+  const { keywords } = req.body;
+  const result = await puppeteer(keywords);
+  res.send(result);
 });
 
 module.exports = router;
