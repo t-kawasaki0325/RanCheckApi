@@ -1,7 +1,11 @@
 const puppeteer = require('puppeteer');
 
 const URL = 'https://google.co.jp/search?q=';
-const SELECTOR = '.rc > div > a:not([class])';
+const baseResponse = {
+  title: '',
+  url: '',
+  rank: '',
+};
 
 const sleep = async () => {
   await new Promise((resolve) =>
@@ -11,7 +15,7 @@ const sleep = async () => {
   );
 };
 
-const doRequest = async (page, keywords) => {
+const doRequest = async (page, keywords, site) => {
   const results = {};
   for (keyword of keywords) {
     await page
@@ -19,11 +23,11 @@ const doRequest = async (page, keywords) => {
         waitUntil: 'networkidle2',
       })
       .catch((e) => {
-        throw { code: 500 };
+        throw { code: 500, message: 'ページのアクセスに失敗しました' };
       });
-    const result = await page
+    const res = await page
       .evaluate(() =>
-        Array.from(document.querySelectorAll(SELECTOR)).map(
+        Array.from(document.querySelectorAll('.rc > div > a:not([class])')).map(
           (element, index) => ({
             title: element.querySelector('h3 span').textContent,
             url: element.href,
@@ -32,16 +36,20 @@ const doRequest = async (page, keywords) => {
         )
       )
       .catch((e) => {
-        throw { code: 500 };
+        throw { code: 500, message: '要素の取得に失敗しました' };
       });
-    results[keyword] = result;
+    results[keyword] = res.find((v) => v.url.includes(site)) || baseResponse;
 
     sleep();
   }
   return results;
 };
 
-module.exports = async (keywords) => {
+module.exports = async ({ keywords, site }) => {
+  if (!keywords || !site) {
+    throw { code: 500, message: 'リクエストが不正です' };
+  }
+
   const browser = await puppeteer.launch({
     args: [
       '--no-sandbox',
@@ -61,7 +69,7 @@ module.exports = async (keywords) => {
         : request.continue();
     });
 
-    return await doRequest(page, keywords);
+    return await doRequest(page, keywords, site);
   } finally {
     await browser.close();
   }
