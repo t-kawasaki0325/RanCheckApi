@@ -1,10 +1,30 @@
 const AWS = require('aws-sdk');
-const httpRequest = require('./modules/httpReqest');
+const request = require('request');
 
 const INSTANCE_ID = ['i-052d1395c28876647'];
 const SITE = 'memorandumrail.com';
 const KEYWORDS = ['ec2', 'php プログラミングスクール'];
 AWS.config.region = 'ap-northeast-1';
+
+const httpRequest = (ip, site, keywords) =>
+  new Promise((resolve, reject) =>
+    request(
+      {
+        method: 'POST',
+        url: `http://${ip}:3000`,
+        json: {
+          site,
+          keywords,
+        },
+      },
+      (err, res) => {
+        if (err) {
+          reject(err);
+        }
+        resolve(res.body);
+      }
+    )
+  );
 
 const startInstance = async (ec2, params) => {
   await ec2
@@ -71,7 +91,7 @@ const main = async () => {
 
   // ここに処理を書く
   const data = await httpRequest(ipAddresses.shift(), SITE, KEYWORDS);
-  // console.log(data);
+  console.log(data);
 
   // インスタンスの停止
   stopInstance(ec2, params);
