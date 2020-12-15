@@ -16,6 +16,7 @@ const main = () => {
     TableName: TABLE,
     Item: {
       Token: uuid,
+      Site: 'example.com',
     },
   };
 
