@@ -2,10 +2,8 @@ const AWS = require('aws-sdk');
 const request = require('request');
 
 const INSTANCE_ID = ['i-052d1395c28876647'];
-const SITE = 'memorandumrail.com';
-const KEYWORDS = ['ec2', 'php プログラミングスクール'];
 const TABLE = 'Rancheck';
-const TOKEN = 'aaaa';
+
 AWS.config.region = 'ap-northeast-1';
 
 const httpRequest = (ip, site, keywords) =>
@@ -27,6 +25,8 @@ const httpRequest = (ip, site, keywords) =>
       }
     )
   );
+
+const isEmpty = (obj) => Object.keys(obj).length === 0;
 
 const getDate = () => {
   const date = new Date();
@@ -87,20 +87,62 @@ const stopInstance = (ec2, params) => {
   });
 };
 
-const save = (data) => {
-  const ddb = new AWS.DynamoDB.DocumentClient();
+const fetch = async (ddb, token, site) => {
+  const params = {
+    TableName: TABLE,
+    Key: {
+      Token: token,
+      Site: site,
+    },
+  };
+
+  const Result = await new Promise((resolve, reject) => {
+    ddb.get(params, (err, data) => {
+      if (err) {
+        reject({
+          code: 500,
+          stack: err.stack,
+          message: 'データ削除に失敗しました',
+        });
+      } else {
+        resolve(data);
+      }
+    });
+  }).catch((err) => err);
+
+  if (isEmpty(Result)) {
+    return {
+      code: 401,
+      message: 'トークンが不正です',
+    };
+  }
+  if (!Result.Item) {
+    return Result;
+  }
+  return Result.Item;
+};
+
+const save = (ddb, token, site, data) => {
   const params = {
     TableName: TABLE,
     Item: {
-      Token: TOKEN,
-      Site: SITE,
-      Result: Object.entries(data).map(([key, value]) => ({
-        date: getDate(),
-        keyword: key,
-        title: value.title,
-        url: value.url,
-        rank: value.rank,
-      })),
+      Token: token,
+      Site: site,
+      Result: Object.assign(
+        {},
+        ...Object.entries(data).map(([key, value]) => ({
+          [key]: {
+            title: value.title,
+            url: value.url,
+            result: [
+              {
+                date: getDate(),
+                rank: value.rank,
+              },
+            ],
+          },
+        }))
+      ),
     },
   };
   ddb.put(params, (err) => {
@@ -115,17 +157,29 @@ const save = (data) => {
 };
 
 const main = async () => {
+  const site = 'memorandumrail.com';
+  const token = 'aaaa';
+
   const ec2 = new AWS.EC2();
+  const ddb = new AWS.DynamoDB.DocumentClient();
   const params = {
     InstanceIds: INSTANCE_ID,
   };
+
+  // キーワードの取得
+  const data = await fetch(ddb, token, site);
+  if (!!data.code) {
+    return data;
+  }
+  const keywords = Object.keys(data.Result);
+  console.log(keywords);
 
   // インスタンスの開始
   const ipAddresses = await startInstance(ec2, params);
 
   // ここに処理を書く
-  const data = await httpRequest(ipAddresses.shift(), SITE, KEYWORDS);
-  save(data);
+  const result = await httpRequest(ipAddresses.shift(), site, keywords);
+  save(ddb, token, site, result);
 
   // インスタンスの停止
   stopInstance(ec2, params);
