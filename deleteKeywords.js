@@ -44,7 +44,7 @@ const fetch = async (ddb, token, site) => {
   return Result.Item;
 };
 
-const put = (ddb, prevItems, token, site, keywords) => {
+const put = async (ddb, prevItems, token, site, keywords) => {
   const params = {
     TableName: TABLE,
     Item: {
@@ -57,15 +57,18 @@ const put = (ddb, prevItems, token, site, keywords) => {
     },
   };
 
-  ddb.put(params, (err) => {
-    if (err) {
-      throw {
-        code: 500,
-        stack: err.stack,
-        message: '保存に失敗しました',
-      };
-    }
-  });
+  await new Promise((resolve, reject) =>
+    ddb.put(params, (err) => {
+      if (err) {
+        reject({
+          code: 500,
+          stack: err.stack,
+          message: '保存に失敗しました',
+        });
+      }
+      resolve();
+    })
+  );
 };
 
 const main = async () => {
@@ -80,7 +83,7 @@ const main = async () => {
     return item;
   }
 
-  put(ddb, item.Result, token, site, keywords);
+  await put(ddb, item.Result, token, site, keywords);
 };
 
 main();

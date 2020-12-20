@@ -75,16 +75,19 @@ const startInstance = async (ec2, params) => {
   );
 };
 
-const stopInstance = (ec2, params) => {
-  ec2.stopInstances(params, (err) => {
-    if (err) {
-      throw {
-        code: 500,
-        stack: err.stack,
-        message: 'インスタンス停止に失敗しました',
-      };
-    }
-  });
+const stopInstance = async (ec2, params) => {
+  await new Promise((resolve, reject) =>
+    ec2.stopInstances(params, (err) => {
+      if (err) {
+        reject({
+          code: 500,
+          stack: err.stack,
+          message: 'インスタンス停止に失敗しました',
+        });
+      }
+      resolve();
+    })
+  );
 };
 
 const fetch = async (ddb, token, site) => {
@@ -122,7 +125,7 @@ const fetch = async (ddb, token, site) => {
   return Result.Item;
 };
 
-const save = (ddb, token, site, data) => {
+const save = async (ddb, token, site, data) => {
   const params = {
     TableName: TABLE,
     Item: {
@@ -145,15 +148,18 @@ const save = (ddb, token, site, data) => {
       ),
     },
   };
-  ddb.put(params, (err) => {
-    if (err) {
-      throw {
-        code: 500,
-        stack: err.stack,
-        message: '保存に失敗しました',
-      };
-    }
-  });
+  await new Promise((resolve, reject) =>
+    ddb.put(params, (err) => {
+      if (err) {
+        reject({
+          code: 500,
+          stack: err.stack,
+          message: '保存に失敗しました',
+        });
+      }
+      resolve();
+    })
+  );
 };
 
 const main = async () => {
@@ -172,17 +178,18 @@ const main = async () => {
     return data;
   }
   const keywords = Object.keys(data.Result);
-  console.log(keywords);
 
   // インスタンスの開始
   const ipAddresses = await startInstance(ec2, params);
 
   // ここに処理を書く
   const result = await httpRequest(ipAddresses.shift(), site, keywords);
-  save(ddb, token, site, result);
 
-  // インスタンスの停止
-  stopInstance(ec2, params);
+  // キーワードの保存およびインスタンスの停止
+  await Promise.all([
+    save(ddb, token, site, result),
+    stopInstance(ec2, params),
+  ]);
 };
 
 main();
