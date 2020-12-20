@@ -66,7 +66,7 @@ exports.handler = async (event) => {
   };
 };
 
-this.handler({
-  token: '1767f0eec54ee',
-  site: 'memorandumraila.com',
-});
+// this.handler({
+//   token: '1767f0eec54ee',
+//   site: 'memorandumraila.com',
+// });

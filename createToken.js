@@ -45,4 +45,4 @@ exports.handler = async () => {
     }));
 };
 
-this.handler();
+// this.handler();

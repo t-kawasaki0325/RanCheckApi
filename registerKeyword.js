@@ -95,8 +95,8 @@ exports.handler = async (event) => {
     }));
 };
 
-this.handler({
-  token: '1767f0eec54ee',
-  keywords: ['php プログラミングスクール', 'プログラミング 30代 遅い'],
-  site: 'memorandumrail.com',
-});
+// this.handler({
+//   token: '1767f0eec54ee',
+//   keywords: ['php プログラミングスクール', 'プログラミング 30代 遅い'],
+//   site: 'memorandumrail.com',
+// });
