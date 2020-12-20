@@ -1,48 +1,72 @@
 const AWS = require('aws-sdk');
 
 const TABLE = 'Rancheck';
-const TOKEN = 'aaaa';
-const SITE = 'example.com';
+const DEFAULT_SITE = 'example.com';
 
 AWS.config.region = 'ap-northeast-1';
 
 const isEmpty = (obj) => Object.keys(obj).length === 0;
 
-const main = async () => {
-  const ddb = new AWS.DynamoDB.DocumentClient();
-
+const fetch = async (ddb, token, site) => {
   const params = {
     TableName: TABLE,
     Key: {
-      Token: TOKEN,
-      Site: SITE,
+      Token: token,
+      Site: site,
     },
   };
 
-  const Result = await new Promise((resolve, reject) => {
+  return await new Promise((resolve, reject) => {
     ddb.get(params, (err, data) => {
       if (err) {
         reject({
           code: 500,
-          stack: err.stack,
-          message: 'データ取得に失敗しました',
         });
-      } else {
-        resolve(data);
+        return;
       }
+      resolve(data);
     });
-  }).catch((err) => err);
+  });
+};
 
-  if (isEmpty(Result)) {
+exports.handler = async (event) => {
+  const { site, token } = event;
+  if (!token || !site) {
+    return {
+      code: 500,
+      message: 'リクエストパラメーターが不正です',
+    };
+  }
+
+  const ddb = new AWS.DynamoDB.DocumentClient();
+
+  // キーワードの取得
+  const [itemForToken, item] = await Promise.all([
+    fetch(ddb, token, DEFAULT_SITE),
+    fetch(ddb, token, site),
+  ]).catch(() => {
+    return [{ code: 500 }, { code: 500 }];
+  });
+  if ('code' in item || 'code' in itemForToken) {
+    return {
+      code: 500,
+      message: 'データベースのアクセスに失敗しました',
+    };
+  }
+  if (isEmpty(itemForToken)) {
     return {
       code: 401,
       message: 'トークンが不正です',
     };
   }
-  if (!Result.Item) {
-    return Result;
-  }
-  return Result.Item;
+
+  return {
+    code: 200,
+    body: isEmpty(item) ? item : item.Item.Result,
+  };
 };
 
-main();
+this.handler({
+  token: '1767f0eec54ee',
+  site: 'memorandumraila.com',
+});

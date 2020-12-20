@@ -1,9 +1,7 @@
 const AWS = require('aws-sdk');
 
 const TABLE = 'Rancheck';
-const TOKEN = 'aaaa';
-const KEYWORDS = ['2'];
-const SITE = 'memorandumrail.com';
+const DEFAULT_SITE = 'example.com';
 
 AWS.config.region = 'ap-northeast-1';
 
@@ -18,30 +16,17 @@ const fetch = async (ddb, token, site) => {
     },
   };
 
-  const Result = await new Promise((resolve, reject) => {
+  return await new Promise((resolve, reject) => {
     ddb.get(params, (err, data) => {
       if (err) {
         reject({
           code: 500,
-          stack: err.stack,
-          message: 'データ削除に失敗しました',
         });
-      } else {
-        resolve(data);
+        return;
       }
+      resolve(data);
     });
-  }).catch((err) => err);
-
-  if (isEmpty(Result)) {
-    return {
-      code: 401,
-      message: 'トークンが不正です',
-    };
-  }
-  if (!Result.Item) {
-    return Result;
-  }
-  return Result.Item;
+  });
 };
 
 const put = async (ddb, prevItems, token, site, keywords) => {
@@ -52,38 +37,68 @@ const put = async (ddb, prevItems, token, site, keywords) => {
       Site: site,
       Result: Object.assign(
         {},
-        Object.keys(prevItems).filter((keyword) => !keywords.includes(keyword))
+        ...Object.keys(prevItems)
+          .filter((keyword) => !keywords.includes(keyword))
+          .map((keyword) => ({ [keyword]: prevItems[keyword] }))
       ),
     },
   };
 
-  await new Promise((resolve, reject) =>
+  return await new Promise((resolve, reject) =>
     ddb.put(params, (err) => {
       if (err) {
-        reject({
-          code: 500,
-          stack: err.stack,
-          message: '保存に失敗しました',
-        });
+        reject();
+        return;
       }
       resolve();
     })
   );
 };
 
-const main = async () => {
-  const token = TOKEN;
-  const site = SITE;
-  const keywords = KEYWORDS;
+exports.handler = async (event) => {
+  const { token, site, keywords } = event;
+  if (!token || !site || !keywords) {
+    return {
+      code: 500,
+      message: 'リクエストパラメーターが不正です',
+    };
+  }
 
   const ddb = new AWS.DynamoDB.DocumentClient();
 
-  const item = await fetch(ddb, token, site);
-  if (!item.Result) {
-    return item;
+  const [itemForToken, item] = await Promise.all([
+    fetch(ddb, token, DEFAULT_SITE),
+    fetch(ddb, token, site),
+  ]).catch(() => {
+    return [{ code: 500 }, { code: 500 }];
+  });
+  if ('code' in item || 'code' in itemForToken) {
+    return {
+      code: 500,
+      message: 'データベースのアクセスに失敗しました',
+    };
+  }
+  if (isEmpty(itemForToken)) {
+    return {
+      code: 401,
+      message: 'トークンが不正です',
+    };
   }
 
-  await put(ddb, item.Result, token, site, keywords);
+  const prevItem = isEmpty(item) ? item : item.Item.Result;
+  return await put(ddb, prevItem, token, site, keywords)
+    .then(() => ({
+      code: 200,
+      message: 'キーワードの削除に成功しました',
+    }))
+    .catch(() => ({
+      code: 500,
+      message: 'キーワードの削除に失敗しました',
+    }));
 };
 
-main();
+this.handler({
+  token: '1767f0eec54ee',
+  keywords: ['php プログラミングスクール', 'プログラミング 30代 遅い'],
+  site: 'memorandumrail.com',
+});

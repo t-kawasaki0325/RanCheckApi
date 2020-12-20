@@ -3,6 +3,7 @@ const request = require('request');
 
 const INSTANCE_ID = ['i-052d1395c28876647'];
 const TABLE = 'Rancheck';
+const DEFAULT_SITE = 'example.com';
 
 AWS.config.region = 'ap-northeast-1';
 
@@ -19,7 +20,10 @@ const httpRequest = (ip, site, keywords) =>
       },
       (err, res) => {
         if (err) {
-          reject(err);
+          reject({
+            code: 500,
+          });
+          return;
         }
         resolve(res.body);
       }
@@ -39,18 +43,16 @@ const startInstance = async (ec2, params) => {
       if (err) {
         throw {
           code: 500,
-          stack: err.stack,
           message: 'インスタンス起動に失敗しました',
         };
       }
     })
     .promise();
-  const { Reservations } = await new Promise((resolve) =>
+  const instances = await new Promise((resolve) =>
     ec2.waitFor('instanceRunning', params, (err, data) => {
       if (err) {
         throw {
           code: 500,
-          stack: err.stack,
           message: 'インスタンス起動待機に失敗しました',
         };
       } else {
@@ -63,29 +65,25 @@ const startInstance = async (ec2, params) => {
       if (err) {
         throw {
           code: 500,
-          stack: err.stack,
           message: 'ステータスok待機に失敗しました',
         };
       }
     })
     .promise();
 
-  return Reservations.map((reservation) =>
-    reservation.Instances.map((instance) => instance.PublicIpAddress).shift()
-  );
+  return instances;
 };
 
 const stopInstance = async (ec2, params) => {
-  await new Promise((resolve, reject) =>
+  return await new Promise((resolve, reject) =>
     ec2.stopInstances(params, (err) => {
       if (err) {
         reject({
           code: 500,
-          stack: err.stack,
-          message: 'インスタンス停止に失敗しました',
         });
+        return;
       }
-      resolve();
+      resolve({});
     })
   );
 };
@@ -99,30 +97,17 @@ const fetch = async (ddb, token, site) => {
     },
   };
 
-  const Result = await new Promise((resolve, reject) => {
+  return await new Promise((resolve, reject) => {
     ddb.get(params, (err, data) => {
       if (err) {
         reject({
           code: 500,
-          stack: err.stack,
-          message: 'データ削除に失敗しました',
         });
-      } else {
-        resolve(data);
+        return;
       }
+      resolve(data);
     });
-  }).catch((err) => err);
-
-  if (isEmpty(Result)) {
-    return {
-      code: 401,
-      message: 'トークンが不正です',
-    };
-  }
-  if (!Result.Item) {
-    return Result;
-  }
-  return Result.Item;
+  });
 };
 
 const save = async (ddb, token, site, data) => {
@@ -148,23 +133,27 @@ const save = async (ddb, token, site, data) => {
       ),
     },
   };
-  await new Promise((resolve, reject) =>
+  return await new Promise((resolve, reject) =>
     ddb.put(params, (err) => {
       if (err) {
         reject({
           code: 500,
-          stack: err.stack,
-          message: '保存に失敗しました',
         });
+        return;
       }
-      resolve();
+      resolve({});
     })
   );
 };
 
-const main = async () => {
-  const site = 'memorandumrail.com';
-  const token = 'aaaa';
+exports.handler = async (event) => {
+  const { site, token } = event;
+  if (!token || !site) {
+    return {
+      code: 500,
+      message: 'リクエストパラメーターが不正です',
+    };
+  }
 
   const ec2 = new AWS.EC2();
   const ddb = new AWS.DynamoDB.DocumentClient();
@@ -173,23 +162,73 @@ const main = async () => {
   };
 
   // キーワードの取得
-  const data = await fetch(ddb, token, site);
-  if (!!data.code) {
-    return data;
+  const [itemForToken, item] = await Promise.all([
+    fetch(ddb, token, DEFAULT_SITE),
+    fetch(ddb, token, site),
+  ]).catch(() => {
+    return [{ code: 500 }, { code: 500 }];
+  });
+  if ('code' in item || 'code' in itemForToken) {
+    return {
+      code: 500,
+      message: 'データベースのアクセスに失敗しました',
+    };
   }
-  const keywords = Object.keys(data.Result);
+  if (isEmpty(itemForToken)) {
+    return {
+      code: 401,
+      message: 'トークンが不正です',
+    };
+  }
+  const keywords = Object.keys(item.Item.Result);
 
   // インスタンスの開始
-  const ipAddresses = await startInstance(ec2, params);
+  const startInstanceResponse = await startInstance(ec2, params).catch(
+    (err) => err
+  );
+  if ('code' in startInstanceResponse) {
+    return startInstanceResponse;
+  }
+  const ipAddresses = startInstanceResponse.Reservations.map((reservation) =>
+    reservation.Instances.map((instance) => instance.PublicIpAddress).shift()
+  );
 
   // ここに処理を書く
-  const result = await httpRequest(ipAddresses.shift(), site, keywords);
+  const result = await httpRequest(ipAddresses.shift(), site, keywords).catch(
+    (err) => err
+  );
+  if ('code' in result) {
+    return {
+      code: 500,
+      message: 'ランキングの取得に失敗しました',
+    };
+  }
 
   // キーワードの保存およびインスタンスの停止
-  await Promise.all([
-    save(ddb, token, site, result),
-    stopInstance(ec2, params),
-  ]);
+  const saveResponse = await save(ddb, token, site, result).catch((err) => err);
+  if ('code' in saveResponse) {
+    return {
+      code: 500,
+      message: 'ランキングの保存に失敗しました',
+    };
+  }
+  const stopInstanceResponse = await stopInstance(ec2, params).catch(
+    (err) => err
+  );
+  if ('code' in stopInstanceResponse) {
+    return {
+      code: 500,
+      message: 'インスタンスの停止に失敗しました',
+    };
+  }
+
+  return {
+    code: 200,
+    message: 'ランキングの保存に成功しました',
+  };
 };
 
-main();
+this.handler({
+  token: '1767f0eec54ee',
+  site: 'memorandumrail.com',
+});

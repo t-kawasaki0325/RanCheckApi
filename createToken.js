@@ -8,9 +8,7 @@ const genUuid = () =>
   new Date().getTime().toString(16) +
   Math.floor(1000 * Math.random()).toString(16);
 
-const main = () => {
-  const ddb = new AWS.DynamoDB.DocumentClient();
-
+const save = async (ddb) => {
   const uuid = genUuid();
   const params = {
     TableName: TABLE,
@@ -20,15 +18,31 @@ const main = () => {
     },
   };
 
-  ddb.put(params, (err) => {
-    if (err) {
-      throw {
-        code: 500,
-        stack: err.stack,
-        message: 'トークンの保存に失敗しました',
-      };
-    }
-  });
+  return new Promise((resolve, reject) =>
+    ddb.put(params, (err) => {
+      if (err) {
+        reject();
+        return;
+      }
+      resolve(uuid);
+    })
+  );
 };
 
-main();
+exports.handler = async () => {
+  const ddb = new AWS.DynamoDB.DocumentClient();
+
+  return await save(ddb)
+    .then((data) => ({
+      code: 200,
+      body: {
+        token: data,
+      },
+    }))
+    .catch(() => ({
+      code: 500,
+      message: 'トークンの保存に失敗しました',
+    }));
+};
+
+this.handler();
