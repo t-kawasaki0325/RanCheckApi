@@ -57,7 +57,10 @@ const put = async (ddb, prevItems, token, site, keywords) => {
 
 exports.handler = async (event) => {
   const { token, site, keywords } = event;
-  if (!token || !site || !keywords) {
+  if (typeof token !== 'string'
+    || typeof site !== 'string'
+    || !Array.isArray(keywords)
+  ) {
     return {
       code: 500,
       message: 'リクエストパラメーターが不正です',

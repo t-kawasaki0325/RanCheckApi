@@ -8,6 +8,17 @@ const genUuid = () =>
   new Date().getTime().toString(16) +
   Math.floor(1000 * Math.random()).toString(16);
 
+const getDate = () => {
+  const date = new Date();
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+};
+
+// TODO: プランを分けるなら引数をもとに算出
+const getExpireDate = () => {
+  const date = new Date();
+  return `${date.getFullYear() + 1}/${date.getMonth() + 1}/${date.getDate()}`;
+};
+
 const save = async (ddb) => {
   const uuid = genUuid();
   const params = {
@@ -15,6 +26,9 @@ const save = async (ddb) => {
     Item: {
       Token: uuid,
       Site: 'example.com',
+      Result: {},
+      CreatedAt: getDate(),
+      ExpiredAt: getExpireDate(),
     },
   };
 

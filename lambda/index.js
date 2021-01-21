@@ -1,9 +1,10 @@
 const AWS = require('aws-sdk');
 const request = require('request');
 
-const INSTANCE_ID = ['i-052d1395c28876647'];
+const INSTANCE_IDS = ['i-052d1395c28876647', 'i-033b0fa62f3cd8fab'];
 const TABLE = 'Rancheck';
 const DEFAULT_SITE = 'example.com';
+const REQUEST_PER_INSTANCE = 5;
 
 AWS.config.region = 'ap-northeast-1';
 
@@ -148,7 +149,7 @@ const save = async (ddb, token, site, data) => {
 
 exports.handler = async (event) => {
   const { site, token } = event;
-  if (!token || !site) {
+  if (typeof token !== 'string' || typeof site !== 'string') {
     return {
       code: 500,
       message: 'リクエストパラメーターが不正です',
@@ -157,9 +158,6 @@ exports.handler = async (event) => {
 
   const ec2 = new AWS.EC2();
   const ddb = new AWS.DynamoDB.DocumentClient();
-  const params = {
-    InstanceIds: INSTANCE_ID,
-  };
 
   // キーワードの取得
   const [itemForToken, item] = await Promise.all([
@@ -181,6 +179,10 @@ exports.handler = async (event) => {
     };
   }
   const keywords = Object.keys(item.Item.Result);
+  const instanceNum = Math.ceil(keywords.length / REQUEST_PER_INSTANCE);
+  const params = {
+    InstanceIds: INSTANCE_IDS.slice(0, instanceNum),
+  };
 
   // インスタンスの開始
   const startInstanceResponse = await startInstance(ec2, params).catch(
@@ -194,15 +196,17 @@ exports.handler = async (event) => {
   );
 
   // ここに処理を書く
-  const result = await httpRequest(ipAddresses.shift(), site, keywords).catch(
-    (err) => err
+  const request = ipAddresses.map((ip) =>
+    httpRequest(ip, site, keywords.splice(0, REQUEST_PER_INSTANCE))
   );
-  if ('code' in result) {
+  const results = await Promise.all(request).catch((err) => err);
+  if ('code' in results) {
     return {
       code: 500,
       message: 'ランキングの取得に失敗しました',
     };
   }
+  const result = Object.assign({}, ...results.map((result) => result));
 
   // キーワードの保存およびインスタンスの停止
   const saveResponse = await save(ddb, token, site, result).catch((err) => err);
