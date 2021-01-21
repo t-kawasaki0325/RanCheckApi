@@ -1,6 +1,9 @@
 const AWS = require('aws-sdk');
 
 const TABLE = 'Rancheck';
+const PLAN = {
+  'BETA': 10
+}
 
 AWS.config.region = 'ap-northeast-1';
 
@@ -27,6 +30,7 @@ const save = async (ddb) => {
       Token: uuid,
       Site: 'example.com',
       Result: {},
+      Plan: PLAN.BETA,
       CreatedAt: getDate(),
       ExpiredAt: getExpireDate(),
     },
