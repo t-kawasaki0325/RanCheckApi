@@ -31,7 +31,7 @@ const fetch = async (ddb, token, site) => {
 
 exports.handler = async (event) => {
   const { site, token } = event;
-  if (!token || !site) {
+  if (typeof token !== 'string' || typeof site !== 'string') {
     return {
       code: 500,
       message: 'リクエストパラメーターが不正です',
