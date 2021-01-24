@@ -2,8 +2,8 @@ const AWS = require('aws-sdk');
 
 const TABLE = 'Rancheck';
 const PLAN = {
-  'BETA': 10
-}
+  BETA: 10,
+};
 
 AWS.config.region = 'ap-northeast-1';
 
@@ -11,15 +11,23 @@ const genUuid = () =>
   new Date().getTime().toString(16) +
   Math.floor(1000 * Math.random()).toString(16);
 
+const zeroPadding = (num, length) => `${num}`.padStart(length, '0');
+
 const getDate = () => {
   const date = new Date();
-  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+  return `${date.getFullYear()}/${zeroPadding(
+    date.getMonth() + 1,
+    2
+  )}/${zeroPadding(date.getDate(), 2)}`;
 };
 
 // TODO: プランを分けるなら引数をもとに算出
 const getExpireDate = () => {
   const date = new Date();
-  return `${date.getFullYear() + 1}/${date.getMonth() + 1}/${date.getDate()}`;
+  return `${date.getFullYear() + 1}/${zeroPadding(
+    date.getMonth() + 1,
+    2
+  )}/${zeroPadding(date.getDate(), 2)}`;
 };
 
 const save = async (ddb) => {

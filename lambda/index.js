@@ -33,9 +33,19 @@ const httpRequest = (ip, site, keywords) =>
 
 const isEmpty = (obj) => Object.keys(obj).length === 0;
 
+const zeroPadding = (num, length) => `${num}`.padStart(length, '0');
+
 const getDate = () => {
   const date = new Date();
-  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
+  return `${date.getFullYear()}/${zeroPadding(
+    date.getMonth() + 1,
+    2
+  )}/${zeroPadding(date.getDate(), 2)}`;
+};
+
+const isExipired = (date) => {
+  const today = parseInt(getDate());
+  return today > parseInt(date);
 };
 
 const startInstance = async (ec2, params) => {
@@ -176,6 +186,12 @@ exports.handler = async (event) => {
     return {
       code: 401,
       message: 'トークンが不正です',
+    };
+  }
+  if (isExipired(itemForToken.Item.ExpiredAt)) {
+    return {
+      code: 410,
+      message: 'トークンの期限が切れています',
     };
   }
   const keywords = Object.keys(item.Item.Result);

@@ -7,6 +7,21 @@ AWS.config.region = 'ap-northeast-1';
 
 const isEmpty = (obj) => Object.keys(obj).length === 0;
 
+const zeroPadding = (num, length) => `${num}`.padStart(length, '0');
+
+const getDate = () => {
+  const date = new Date();
+  return `${date.getFullYear()}/${zeroPadding(
+    date.getMonth() + 1,
+    2
+  )}/${zeroPadding(date.getDate(), 2)}`;
+};
+
+const isExipired = (date) => {
+  const today = parseInt(getDate());
+  return today > parseInt(date);
+};
+
 const fetch = async (ddb, token, site) => {
   const params = {
     TableName: TABLE,
@@ -55,9 +70,10 @@ const put = async (ddb, prevItems, token, site, keywords) => {
 
 exports.handler = async (event) => {
   const { token, site, keywords } = event;
-  if (typeof token !== 'string'
-    || typeof site !== 'string'
-    || !Array.isArray(keywords)
+  if (
+    typeof token !== 'string' ||
+    typeof site !== 'string' ||
+    !Array.isArray(keywords)
   ) {
     return {
       code: 500,
@@ -83,6 +99,12 @@ exports.handler = async (event) => {
     return {
       code: 401,
       message: 'トークンが不正です',
+    };
+  }
+  if (isExipired(itemForToken.Item.ExpiredAt)) {
+    return {
+      code: 410,
+      message: 'トークンの期限が切れています',
     };
   }
 
