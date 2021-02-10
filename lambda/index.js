@@ -44,8 +44,8 @@ const getDate = () => {
 };
 
 const isExipired = (date) => {
-  const today = parseInt(getDate());
-  return today > parseInt(date);
+  const today = parseInt(getDate().replace(/\//g, ''));
+  return today > parseInt(date.replace(/\//g, ''));
 };
 
 const startInstance = async (ec2, params) => {
@@ -216,7 +216,8 @@ exports.handler = async (event) => {
     httpRequest(ip, site, keywords.splice(0, REQUEST_PER_INSTANCE))
   );
   const results = await Promise.all(request).catch((err) => err);
-  if ('code' in results) {
+  const hasError = !!results.find((v) => 'code' in v);
+  if (hasError) {
     return {
       code: 500,
       message: 'ランキングの取得に失敗しました',

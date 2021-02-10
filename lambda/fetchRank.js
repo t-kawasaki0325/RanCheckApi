@@ -18,8 +18,8 @@ const getDate = () => {
 };
 
 const isExipired = (date) => {
-  const today = parseInt(getDate());
-  return today > parseInt(date);
+  const today = parseInt(getDate().replace(/\//g, ''));
+  return today > parseInt(date.replace(/\//g, ''));
 };
 
 const fetch = async (ddb, token, site) => {
