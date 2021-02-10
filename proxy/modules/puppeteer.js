@@ -6,6 +6,7 @@ const baseResponse = {
   url: '',
   rank: '',
 };
+const selectorList = ['.rc > div > a:not([class])', '.yuRUbf a:not([class])'];
 
 const sleep = async () => {
   await new Promise((resolve) =>
@@ -26,15 +27,18 @@ const doRequest = async (page, keywords, site) => {
         throw { code: 500, message: 'ページのアクセスに失敗しました' };
       });
     const res = await page
-      .evaluate(() =>
-        Array.from(document.querySelectorAll('.rc > div > a:not([class])')).map(
+      .evaluate((selectorList) => {
+        const selector = selectorList.find(
+          (v) => document.querySelectorAll(v).length !== 0
+        );
+        return Array.from(document.querySelectorAll(selector)).map(
           (element, index) => ({
             title: element.querySelector('h3 span').textContent,
             url: element.href,
             rank: index + 1,
           })
-        )
-      )
+        );
+      }, selectorList)
       .catch((e) => {
         throw { code: 500, message: '要素の取得に失敗しました' };
       });
