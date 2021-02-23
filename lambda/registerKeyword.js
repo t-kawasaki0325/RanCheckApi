@@ -2,6 +2,7 @@ const AWS = require('aws-sdk');
 
 const TABLE = 'Rancheck';
 const DEFAULT_SITE = 'example.com';
+const DEFAULT_TOKEN = '1778eec93fc3aa';
 
 AWS.config.region = 'ap-northeast-1';
 
@@ -68,6 +69,25 @@ const put = async (ddb, prevItems, token, site, keywords) => {
   );
 };
 
+const deleteSite = async (ddb, site) => {
+  const params = {
+    TableName: TABLE,
+    Key: {
+      Token: DEFAULT_TOKEN,
+      Site: site,
+    },
+  };
+  return new Promise((resolve, reject) =>
+    ddb.delete(params, (err) => {
+      if (err) {
+        reject();
+        return;
+      }
+      resolve();
+    })
+  );
+};
+
 exports.handler = async (event) => {
   const { token, site, keywords } = event;
   if (
@@ -83,13 +103,14 @@ exports.handler = async (event) => {
 
   const ddb = new AWS.DynamoDB.DocumentClient();
 
-  const [itemForToken, item] = await Promise.all([
+  const [itemForToken, itemDefaultToken, item] = await Promise.all([
     fetch(ddb, token, DEFAULT_SITE),
+    fetch(ddb, DEFAULT_TOKEN, site),
     fetch(ddb, token, site),
   ]).catch(() => {
-    return [{ code: 500 }, { code: 500 }];
+    return [{ code: 500 }, { code: 500 }, { code: 500 }];
   });
-  if ('code' in item || 'code' in itemForToken) {
+  if ('code' in item || 'code' in itemDefaultToken || 'code' in itemForToken) {
     return {
       code: 500,
       message: 'データベースのアクセスに失敗しました',
@@ -108,8 +129,14 @@ exports.handler = async (event) => {
     };
   }
 
-  const prevItem = isEmpty(item) ? item : item.Item.Result;
+  const defaultItem = !isEmpty(itemDefaultToken)
+    ? itemDefaultToken.Item.Result
+    : {};
+  const prevItem = isEmpty(item) ? defaultItem : item.Item.Result;
   return await put(ddb, prevItem, token, site, keywords)
+    .then(async () => {
+      await deleteSite(ddb, site);
+    })
     .then(() => ({
       code: 200,
       token: 'サイト・キーワードの登録に成功しました',
